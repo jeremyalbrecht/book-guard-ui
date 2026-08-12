@@ -1,0 +1,50 @@
+<!doctype html>
+
+<html lang="%paraglide.lang%" dir="%paraglide.dir%">
+	<head>
+		<meta charset="utf-8" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+		<meta name="text-scale" content="scale" />
+		<meta name="description" content="Ex-Libris — votre bibliothèque personnelle." />
+		<meta name="robots" content="noindex, nofollow" />
+
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<meta name="theme-color" content="#EFF0E9" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="Ex-Libris" />
+
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+		/>
+
+		<script>
+			// Applied before first paint so the app never flashes the wrong theme.
+			// A stored choice overrides the system preference for good; otherwise
+			// we follow prefers-color-scheme.
+			(() => {
+				const stored = localStorage.getItem('exlibris:theme');
+				const theme =
+					stored === 'light' || stored === 'dark'
+						? stored
+						: matchMedia('(prefers-color-scheme: dark)').matches
+							? 'dark'
+							: 'light';
+				document.documentElement.dataset.theme = theme;
+				document
+					.querySelector('meta[name="theme-color"]')
+					?.setAttribute('content', theme === 'dark' ? '#1B1815' : '#EFF0E9');
+			})();
+		</script>
+
+		%sveltekit.head%
+	</head>
+
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

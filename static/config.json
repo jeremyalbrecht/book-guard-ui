@@ -1,0 +1,16 @@
+{
+	"_comment": "Runtime configuration, read at boot. Edit it next to the built files — no rebuild needed. Set oidc to null to run against a Go API started with AUTH_DISABLED=true.",
+	"oidc": {
+		"issuer": "https://auth.jalbrecht.fr",
+		"clientId": "ex-libris",
+		"scope": "openid profile email groups offline_access",
+		"audience": "ex-libris-api"
+	},
+	"_example": {
+		"issuer": "https://auth.example.com",
+		"clientId": "ex-libris",
+		"scope": "openid profile email groups offline_access",
+		"audience": "ex-libris-api",
+		"_resource": "Alternative to audience, for providers that use the RFC 8707 resource indicator instead."
+	}
+}
