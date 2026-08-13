@@ -126,14 +126,17 @@
 		stream = null;
 		engine = null;
 		if (video) video.srcObject = null;
-		clearTimeout(tapTimer);
-		tap = null;
 	}
 
+	let refocusing = false;
+
 	/**
-	 * pointsOfInterest / focusMode are non-standard MediaTrackConstraints
-	 * (Chromium on Android only). Elsewhere this quietly no-ops; the tap
-	 * ring is still shown so the gesture feels acknowledged.
+	 * There is no cross-browser way to drive camera focus from JS.
+	 * Chromium exposes pointsOfInterest/focusMode (non-standard); Safari on
+	 * iOS exposes nothing at all. The one lever that works everywhere is
+	 * restarting the capture session — AVFoundation (and most other camera
+	 * stacks) re-run their initial autofocus sweep on a fresh getUserMedia
+	 * call, which is the closest thing to a manual refocus iOS allows.
 	 */
 	async function focusAt(clientX: number, clientY: number, el: HTMLElement) {
 		const rect = el.getBoundingClientRect();
@@ -146,22 +149,27 @@
 		const capabilities = track.getCapabilities?.() as
 			| (MediaTrackCapabilities & { focusMode?: string[] })
 			| undefined;
-		if (!capabilities?.focusMode?.includes('single-shot')) return;
 
-		const x = (clientX - rect.left) / rect.width;
-		const y = (clientY - rect.top) / rect.height;
-		try {
-			await track.applyConstraints({
-				advanced: [
-					{
-						focusMode: 'single-shot',
-						pointsOfInterest: [{ x, y }]
-					} as MediaTrackConstraintSet
-				]
-			});
-		} catch {
-			// Focus tap is a nice-to-have; a rejected constraint isn't worth surfacing.
+		if (capabilities?.focusMode?.includes('single-shot')) {
+			const x = (clientX - rect.left) / rect.width;
+			const y = (clientY - rect.top) / rect.height;
+			try {
+				await track.applyConstraints({
+					advanced: [
+						{ focusMode: 'single-shot', pointsOfInterest: [{ x, y }] } as MediaTrackConstraintSet
+					]
+				});
+			} catch {
+				// Focus tap is a nice-to-have; a rejected constraint isn't worth surfacing.
+			}
+			return;
 		}
+
+		if (refocusing || !video) return;
+		refocusing = true;
+		stop();
+		await start(video);
+		refocusing = false;
 	}
 
 	$effect(() => {
