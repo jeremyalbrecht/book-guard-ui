@@ -1,12 +1,13 @@
 <script lang="ts">
 	import type { Book } from '$lib/types';
 	import { displayAuthor, displayTitle } from '$lib/i18n';
-	import { isEmptySlot, spineColor, spineHeight, spineWidth } from '$lib/spine';
+	import { CoverColor } from '$lib/coverColor.svelte';
+	import { isEmptySlot, spineHeight, spineWidth } from '$lib/spine';
 
 	let { book }: { book: Book } = $props();
 
 	const empty = $derived(isEmptySlot(book.status));
-	const color = $derived(spineColor(book));
+	const spine = new CoverColor(() => book);
 	const width = $derived(spineWidth(book));
 	const height = $derived(spineHeight(book));
 </script>
@@ -18,7 +19,7 @@
 <span
 	class="spine"
 	class:empty
-	style:--spine-color={color}
+	style:--spine-color={spine.current}
 	style:--w="{width}px"
 	style:--h="{height}px"
 >
@@ -42,7 +43,8 @@
 			var(--shadow-1);
 		transition:
 			transform var(--dur-base) var(--ease-out),
-			box-shadow var(--dur-base) var(--ease-out);
+			box-shadow var(--dur-base) var(--ease-out),
+			background-color var(--dur-base) var(--ease-out);
 	}
 
 	/* Books not yet acquired: a gap in the shelf, dashed and unfilled. */

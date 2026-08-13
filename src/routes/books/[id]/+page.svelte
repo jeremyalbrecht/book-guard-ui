@@ -6,9 +6,9 @@
 	import RatingDots from '$lib/components/RatingDots.svelte';
 	import TagInput from '$lib/components/TagInput.svelte';
 	import { deleteBook, errorMessage, updateBook } from '$lib/api';
+	import { CoverColor } from '$lib/coverColor.svelte';
 	import { displayAuthor, displayTitle, formatDate, m, statusLabel } from '$lib/i18n';
 	import { online } from '$lib/online.svelte';
-	import { spineColor } from '$lib/spine';
 	import { isAwaitingMetadata, needsManualNaming, type BookPatch } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -18,6 +18,7 @@
 	// navigating to another book), and each mutation writes the API's response
 	// straight back over it.
 	let book = $derived(data.book);
+	const cover = new CoverColor(() => book);
 	let actionError = $state<string | null>(null);
 	let busy = $state(false);
 	// Only ever shown for a book with no name of its own, so these start empty.
@@ -115,7 +116,7 @@
 			<div
 				class="cover"
 				class:hollow={book.status === 'to_read' && !book.cover_url}
-				style:--spine-color={spineColor(book)}
+				style:--spine-color={cover.current}
 				aria-hidden="true"
 			>
 				<Cover {book} />

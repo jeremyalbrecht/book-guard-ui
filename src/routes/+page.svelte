@@ -1,23 +1,18 @@
 <script lang="ts">
 	import { invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import Cover from '$lib/components/Cover.svelte';
+	import FeatureCard from '$lib/components/FeatureCard.svelte';
 	import SearchField from '$lib/components/SearchField.svelte';
 	import Spine from '$lib/components/Spine.svelte';
 	import { errorMessage } from '$lib/api';
-	import { displayTitle, displayAuthor, formatDate, m, searchResults, shelfCount } from '$lib/i18n';
+	import { displayTitle, displayAuthor, m, searchResults, shelfCount } from '$lib/i18n';
 	import { search } from '$lib/search';
-	import { spineColor } from '$lib/spine';
 	import type { Book } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	let query = $state('');
-
-	function since(book: Book): string {
-		return m.shelf_since({ date: formatDate(book.created_at, { day: 'numeric', month: 'long' }) });
-	}
 
 	/** Most recently touched book still in progress — the one on the nightstand. */
 	function currentlyReading(books: Book[]): Book | undefined {
@@ -58,17 +53,7 @@
 		{#if featured}
 			<section aria-labelledby="lecture-en-cours">
 				<p class="eyebrow" id="lecture-en-cours">{m.shelf_currently_reading()}</p>
-				<a class="feature card" href={resolve('/books/[id]', { id: featured.id })}>
-					<span class="ribbon" aria-hidden="true"></span>
-					<span class="cover" style:--spine-color={spineColor(featured)} aria-hidden="true">
-						<Cover book={featured} />
-					</span>
-					<span class="meta">
-						<span class="title">{displayTitle(featured)}</span>
-						<span class="author">{displayAuthor(featured)}</span>
-						<span class="since">{since(featured)}</span>
-					</span>
-				</a>
+				<FeatureCard book={featured} />
 			</section>
 		{/if}
 
@@ -131,75 +116,13 @@
 	}
 
 	/* Currently reading ------------------------------------------------------ */
+	/* Full styling lives in FeatureCard.svelte; only the loading skeleton's box
+	   model is needed here, since that placeholder renders before FeatureCard
+	   (whose book isn't known yet) can be shown. */
 
 	.feature {
-		position: relative;
-		display: flex;
-		gap: var(--space-4);
 		padding: var(--space-4);
 		overflow: hidden;
-		transition: transform var(--dur-base) var(--ease-out);
-	}
-
-	.feature:active {
-		transform: scale(0.99);
-	}
-
-	/* The one skeuomorphic touch: a ribbon bookmark tucked into the card. */
-	.ribbon {
-		position: absolute;
-		inset-block-start: 0;
-		inset-inline-end: var(--space-5);
-		width: 20px;
-		height: 56px;
-		background: var(--wine);
-		clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%);
-	}
-
-	.cover {
-		position: relative;
-		display: block;
-		flex: none;
-		overflow: hidden;
-		width: 66px;
-		height: 96px;
-		border-radius: 2px 4px 4px 2px;
-		background: var(--spine-color);
-		box-shadow:
-			inset 8px 0 0 -6px rgb(255 255 255 / 0.22),
-			inset -10px 0 14px -10px rgb(0 0 0 / 0.55),
-			var(--shadow-2);
-	}
-
-	.meta {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-		padding-inline-end: var(--space-6);
-	}
-
-	.title {
-		font-family: var(--font-display);
-		font-size: 1.3125rem;
-		font-weight: 600;
-		font-variation-settings: 'opsz' 72;
-		line-height: 1.2;
-		text-wrap: balance;
-	}
-
-	.author {
-		color: var(--ink-soft);
-		font-size: 1rem;
-	}
-
-	.since {
-		margin-block-start: var(--space-2);
-		font-family: var(--font-mono);
-		font-size: 0.6875rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--ink-soft);
 	}
 
 	/* Shelf ------------------------------------------------------------------ */

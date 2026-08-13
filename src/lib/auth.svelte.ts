@@ -15,6 +15,7 @@ import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
 import { browser } from '$app/environment';
 import { loadConfig, type OidcConfig } from './config';
 import { setAuthTokenProvider, setForbiddenHandler, setUnauthorizedHandler } from './api';
+import { clearCoverColors } from './coverColor';
 import { clearCovers } from './covers';
 import { inspectToken, type TokenDiagnostics } from './token';
 
@@ -195,6 +196,7 @@ class Auth {
 	async #onRejected(reason: Rejection['reason']): Promise<void> {
 		if (this.#status === 'rejected') return;
 		clearCovers();
+		clearCoverColors();
 		const token = (await this.#manager?.getUser())?.access_token;
 		this.#rejection = { reason, diagnostics: inspectToken(token) };
 		this.#status = 'rejected';
@@ -205,6 +207,7 @@ class Auth {
 		// Cover images were fetched with the dead session's token; on a shared
 		// device they must not survive into the next one.
 		clearCovers();
+		clearCoverColors();
 		await this.#manager?.removeUser();
 		this.#profile = null;
 		this.#rejection = null;
@@ -248,6 +251,7 @@ class Auth {
 	async logout(): Promise<void> {
 		if (!this.#manager) return;
 		clearCovers();
+		clearCoverColors();
 		this.#rejection = null;
 		try {
 			await this.#manager.signoutRedirect();
