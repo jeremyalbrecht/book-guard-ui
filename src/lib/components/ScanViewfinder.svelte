@@ -21,13 +21,26 @@
 
 	const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 
+	/** Longest edge, in pixels, that the cropped reticle region is upscaled to before decoding. */
+	const DECODE_TARGET = 900;
+
+	interface ZXingResult {
+		getText(): string;
+	}
+	interface ZXingReaderLike {
+		decodeFromCanvas(canvas: HTMLCanvasElement): ZXingResult;
+	}
+
 	let video = $state<HTMLVideoElement | null>(null);
+	let reticle = $state<HTMLDivElement | null>(null);
 	let error = $state<string | null>(null);
 	let engine = $state<'native' | 'fallback' | null>(null);
 
 	let stream: MediaStream | null = null;
 	let frame = 0;
-	let stopFallback: (() => void) | null = null;
+	let canvas: HTMLCanvasElement | null = null;
+	let ctx: CanvasRenderingContext2D | null = null;
+	let zxingReader: ZXingReaderLike | null = null;
 	let lastCode = '';
 	let lastAt = 0;
 	let tap = $state<{ x: number; y: number } | null>(null);
@@ -52,31 +65,59 @@
 		}
 	}
 
-	async function runNative(el: HTMLVideoElement, detector: BarcodeDetectorLike) {
-		engine = 'native';
-		const tick = async () => {
-			if (!stream) return;
-			try {
-				const [found] = await detector.detect(el);
-				if (found?.rawValue) emit(found.rawValue);
-			} catch {
-				// A dropped frame is not worth surfacing; the next one will do.
-			}
-			frame = requestAnimationFrame(() => void tick());
-		};
-		frame = requestAnimationFrame(() => void tick());
+	/**
+	 * Maps the reticle's on-screen box to a pixel rect in the raw video
+	 * frame, undoing the object-fit: cover crop/scale, then reports how
+	 * large a canvas to draw it into so the decoder sees a magnified image
+	 * instead of a tiny fraction of the full frame. This is what lets a
+	 * barcode be decoded from a comfortable (well-focused) distance, and
+	 * what lets physically small barcodes be read at all.
+	 */
+	function cropRegion(el: HTMLVideoElement, box: HTMLDivElement) {
+		const videoRect = el.getBoundingClientRect();
+		const boxRect = box.getBoundingClientRect();
+		const vw = el.videoWidth;
+		const vh = el.videoHeight;
+		if (!videoRect.width || !videoRect.height || !vw || !vh) return null;
+
+		const scale = Math.max(videoRect.width / vw, videoRect.height / vh);
+		const offsetX = (vw * scale - videoRect.width) / 2;
+		const offsetY = (vh * scale - videoRect.height) / 2;
+
+		let sx = (boxRect.left - videoRect.left + offsetX) / scale;
+		let sy = (boxRect.top - videoRect.top + offsetY) / scale;
+		let sw = boxRect.width / scale;
+		let sh = boxRect.height / scale;
+
+		sx = Math.max(0, sx);
+		sy = Math.max(0, sy);
+		sw = Math.min(sw, vw - sx);
+		sh = Math.min(sh, vh - sy);
+		if (sw <= 0 || sh <= 0) return null;
+
+		const upscale = Math.min(4, Math.max(1, DECODE_TARGET / Math.max(sw, sh)));
+		return { sx, sy, sw, sh, cw: Math.round(sw * upscale), ch: Math.round(sh * upscale) };
 	}
 
-	/** iOS Safari has no BarcodeDetector, so ZXing is loaded on demand there. */
-	async function runFallback(el: HTMLVideoElement) {
-		engine = 'fallback';
-		const { BrowserMultiFormatReader } = await import('@zxing/browser');
-		if (!stream) return;
-		const reader = new BrowserMultiFormatReader();
-		const controls = reader.decodeFromVideoElement(el, (result) => {
-			if (result) emit(result.getText());
-		});
-		stopFallback = () => void controls.then((c) => c.stop()).catch(() => {});
+	async function tick(detector: BarcodeDetectorLike | null) {
+		if (!stream || !video || !reticle || !ctx || !canvas) return;
+		const region = cropRegion(video, reticle);
+		if (region) {
+			canvas.width = region.cw;
+			canvas.height = region.ch;
+			ctx.drawImage(video, region.sx, region.sy, region.sw, region.sh, 0, 0, region.cw, region.ch);
+			try {
+				if (detector) {
+					const [found] = await detector.detect(canvas);
+					if (found?.rawValue) emit(found.rawValue);
+				} else if (zxingReader) {
+					emit(zxingReader.decodeFromCanvas(canvas).getText());
+				}
+			} catch {
+				// No barcode in this frame — the common case, not worth surfacing.
+			}
+		}
+		frame = requestAnimationFrame(() => void tick(detector));
 	}
 
 	async function start(el: HTMLVideoElement) {
@@ -92,7 +133,11 @@
 
 		try {
 			stream = await navigator.mediaDevices.getUserMedia({
-				video: { facingMode: { ideal: 'environment' } },
+				video: {
+					facingMode: { ideal: 'environment' },
+					width: { ideal: 1920 },
+					height: { ideal: 1080 }
+				},
 				audio: false
 			});
 		} catch (cause) {
@@ -113,30 +158,41 @@
 			// Autoplay was blocked; the poster frame stays and the manual field still works.
 		}
 
+		canvas = document.createElement('canvas');
+		ctx = canvas.getContext('2d', { willReadFrequently: true });
+
 		const detector = nativeDetector();
-		if (detector) await runNative(el, detector);
-		else await runFallback(el);
+		/** iOS Safari has no BarcodeDetector, so ZXing is loaded on demand there. */
+		if (detector) {
+			engine = 'native';
+		} else {
+			engine = 'fallback';
+			const { BrowserMultiFormatReader } = await import('@zxing/browser');
+			zxingReader = new BrowserMultiFormatReader();
+		}
+		frame = requestAnimationFrame(() => void tick(detector));
 	}
 
 	function stop() {
 		cancelAnimationFrame(frame);
-		stopFallback?.();
-		stopFallback = null;
 		stream?.getTracks().forEach((track) => track.stop());
 		stream = null;
 		engine = null;
+		zxingReader = null;
+		canvas = null;
+		ctx = null;
 		if (video) video.srcObject = null;
 	}
 
 	let refocusing = false;
 
 	/**
-	 * There is no cross-browser way to drive camera focus from JS.
-	 * Chromium exposes pointsOfInterest/focusMode (non-standard); Safari on
-	 * iOS exposes nothing at all. The one lever that works everywhere is
-	 * restarting the capture session — AVFoundation (and most other camera
-	 * stacks) re-run their initial autofocus sweep on a fresh getUserMedia
-	 * call, which is the closest thing to a manual refocus iOS allows.
+	 * Chromium exposes pointsOfInterest/focusMode (non-standard) to nudge
+	 * focus at a point. Safari on iOS exposes no focus API at all, and
+	 * restarting the capture session does not reliably reset the lens
+	 * either — WebKit just doesn't give JS a lever here. Restarting is
+	 * still attempted as a best-effort fallback, but the reticle crop
+	 * above is what actually removes the need to focus at macro range.
 	 */
 	async function focusAt(clientX: number, clientY: number, el: HTMLElement) {
 		const rect = el.getBoundingClientRect();
@@ -192,7 +248,7 @@
 	<!-- Live camera preview: no audio track, so no captions to provide. -->
 	<video bind:this={video} playsinline muted autoplay></video>
 
-	<div class="reticle" aria-hidden="true"></div>
+	<div class="reticle" bind:this={reticle} aria-hidden="true"></div>
 
 	{#if tap}
 		<div class="focus-ring" style:left="{tap.x}px" style:top="{tap.y}px" aria-hidden="true"></div>
