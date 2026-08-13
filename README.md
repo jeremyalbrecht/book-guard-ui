@@ -118,6 +118,32 @@ src/
     auth/callback/        OIDC redirect target
 ```
 
+## Deployment
+
+The static build is served by nginx in `Dockerfile`, sitting behind Traefik on
+the same host as the API (see `../book-guard`'s README).
+
+### Releases
+
+Images are published to Docker Hub as `jeremyalbrecht/book-guard-ui` by
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml):
+
+- Every push to `main` (after tests pass) publishes `:latest` and `:sha-<commit>` —
+  useful for local/dev, but **not** what a Kubernetes `Deployment` should pin to,
+  since either tag can move or get overwritten by the next push.
+- Pushing a `vX.Y.Z` tag publishes immutable version tags instead: `:X.Y.Z` and
+  `:X.Y`. Cut a release with:
+
+  ```bash
+  git tag v1.2.3
+  git push origin v1.2.3
+  ```
+
+  Then point the Deployment manifest's `image:` at the fixed version, e.g.
+  `jeremyalbrecht/book-guard-ui:1.2.3`, and bump it explicitly (PR/commit) each
+  release rather than tracking `latest`. Keep the API and UI versions in sync if
+  a release changes the contract between them.
+
 ## Notes
 
 - **Every book has an ISBN.** It is the only identity a book has, so the API
